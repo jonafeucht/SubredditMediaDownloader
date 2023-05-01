@@ -7,7 +7,8 @@ from aiohttp import client_exceptions
 
 def get_logger(name, logger_level=logging.INFO):
     logger = logging.getLogger(name)
-    formatter = logging.Formatter('%(asctime)s,%(msecs)d -> %(filename)s:%(lineno)d [%(levelname)s] -> %(message)s')
+    formatter = logging.Formatter(
+        '%(asctime)s,%(msecs)d -> %(filename)s:%(lineno)d [%(levelname)s] -> %(message)s')
 
     # Log to sysout.
     handler = logging.StreamHandler()
@@ -44,13 +45,15 @@ def retry_connection(func):
                     requests.exceptions.ConnectionError,
                     asyncio.exceptions.TimeoutError) as error:
 
-                logger.debug(f"Error trying to connect. {type(error).__name__}: {error}")
+                logger.debug(
+                    f"Error trying to connect. {type(error).__name__}: {error}")
 
                 if tries < 5:
                     logger.debug(f"Try {tries}/5. Retrying in 10 seconds...")
                 else:
                     # If we got to this point, we've tried 5 times without succeeding.
-                    logger.error(f"Too many retries. Post will be skipped: {post_id}")
+                    logger.error(
+                        f"Too many retries. Post will be skipped: {post_id}")
                     return None
 
             except Exception as error:

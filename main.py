@@ -7,6 +7,7 @@ import re
 import time
 import warnings
 from configparser import ConfigParser
+import argparse
 
 import aiofiles
 import aiohttp
@@ -30,6 +31,31 @@ class SubredditDownloader:
 
         self.api = PushshiftAPI()
         self.session = self.set_session()
+
+        # Pass arguments to the script.
+        # Example: python main.py --subreddit memes --after=2023-01-01 --before=2023-04-01
+        # Required argument: --subreddit
+        # Optional arguments: --before, --after
+        parser = argparse.ArgumentParser(
+            description='Description of your script')
+
+        parser.add_argument('--subreddit', type=str,
+                            required=True, help='Name of the subreddit')
+
+        # For example, if you want to download the images from the last 9 days use: AFTER = 2021-10-01
+        # If you want the images before the year 2021 use: BEFORE = 2021-01-01
+        # If you only want the images from the year 2018 use: BEFORE = 2019-01-01, AFTER = 2017-12-31
+        # If you don't want to specify a date just leave it blank like so: AFTER =
+
+        # Download images after this date. Format: YYYY-MM-DD
+        parser.add_argument('--after', type=str,
+                            help='Date in the format YYYY-MM-DD')
+
+        # Download images before this date. Format: YYYY-MM-DD
+        parser.add_argument('--before', type=str,
+                            help='Date in the format YYYY-MM-DD')
+
+        self.args = parser.parse_args()
 
     @staticmethod
     def set_session():
@@ -74,7 +100,8 @@ class SubredditDownloader:
                     print(f"Unrecognized link skipped. {link}")
                     continue
 
-            tasks.append(asyncio.create_task(self.download(name=name, url=link)))
+            tasks.append(asyncio.create_task(
+                self.download(name=name, url=link)))
 
         await async_tqdm.gather(*tasks, colour='green')
 
@@ -85,19 +112,19 @@ class SubredditDownloader:
         return self.api.metadata_['es']['hits']['total']['value']
 
     async def get_submissions(self, ask_len=False):
-        subreddit = self.bot_config['SUBREDDIT']
+        subreddit = self.args.subreddit
         # If we only want to know the total amount of submissions,
         # we can set a limit of 1 to be kind to PushShift api.
         limit = 1 if ask_len else None
 
-        date_config = self.config['DATES']
-        before = date_config['BEFORE'] or ''
-        after = date_config['AFTER'] or ''
+        before = self.args.before or ''
+        after = self.args.after or ''
 
         if ask_len:
-            subreddit = self.bot_config['SUBREDDIT']
+            subreddit = self.args.subreddit
             if after and before:
-                print(f"Scraping images from r/{subreddit} before {before} and after {after}")
+                print(
+                    f"Scraping images from r/{subreddit} before {before} and after {after}")
             elif before:
                 print(f"Scraping images from r/{subreddit} before {before}")
             elif after:
@@ -107,9 +134,11 @@ class SubredditDownloader:
 
         try:
             if before:
-                before = int(datetime.datetime.strptime(before, '%Y-%m-%d').timestamp())
+                before = int(datetime.datetime.strptime(
+                    before, '%Y-%m-%d').timestamp())
             if after:
-                after = int(datetime.datetime.strptime(after, '%Y-%m-%d').timestamp())
+                after = int(datetime.datetime.strptime(
+                    after, '%Y-%m-%d').timestamp())
         except ValueError:
             print("Date format is wrong. Please use YYYY-MM-DD")
             print("Quitting...")
@@ -133,13 +162,14 @@ class SubredditDownloader:
 
         with tqdm(total=submissions_len, colour='green') as pbar:
             for sub in submissions:
-                if not hasattr(sub, 'url'):
+                if not hasattr(sub, 'url') or sub.url is None:  # Added check for NoneType
                     # Update progress bar status
                     pbar.update(1)
                     continue
-                if re.search(r'\.(jpg|gif|png)$', sub.url):
+
+                if sub.url and re.search(r'\.(jpg|gif|png)$', str(sub.url)):
                     elements[sub.id] = sub.url
-                elif re.search(r'\.gifv$', sub.url):
+                elif isinstance(sub.url, str) and re.search(r'\.gifv$', sub.url):
                     link = await self.get_real_gif_link(sub.url)
                     if link:
                         elements[sub.id] = link
@@ -151,7 +181,6 @@ class SubredditDownloader:
                     except AttributeError:
                         # This happens with removed posts.
                         pass
-
                 elif sub.url.startswith('https://v.redd.it/'):
                     video = await self.parse_video(sub)
                     if video:
@@ -161,6 +190,7 @@ class SubredditDownloader:
                     pass
                 # Update progress bar status
                 pbar.update(1)
+
         return elements
 
     async def get_real_gif_link(self, link):
@@ -250,7 +280,8 @@ class SubredditDownloader:
         else:
             sub_folder = 'images'
 
-        dir_path = pathlib.Path(self.bot_config['DOWNLOAD_FOLDER']) / self.bot_config['SUBREDDIT'] / sub_folder
+        dir_path = pathlib.Path(
+            self.bot_config['DOWNLOAD_FOLDER']) / self.args.subreddit / sub_folder
         try:
             dir_path.mkdir(parents=True, exist_ok=True)
             return dir_path
